@@ -5,4 +5,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onProcessComplete: (callback) => ipcRenderer.on('process-complete', callback),
     minimize: () => ipcRenderer.send('window-minimize'),
     close: () => ipcRenderer.send('window-close')
-});
+});l
