@@ -1,29 +1,53 @@
+
 document.addEventListener('DOMContentLoaded', () => {
   // DOM Elements
-    const dropzone = document.getElementById('dropzone');
-    const dropzoneContainer = document.getElementById('dropzone-container');
-    const fileInput = document.getElementById('file-input');
-    const uploadedFilesContainer = document.getElementById('uploaded-files');
-    const uploadMoreBtn = document.getElementById('upload-more');
-    const clearAllBtn = document.getElementById('clear-all');
-    const startProcessBtn = document.getElementById('start-process');
-    const processingSection = document.getElementById('processing-section');
-    const progressContainer = document.getElementById('progress-container');
-    const progressText = document.querySelector('.progress-text');
+      const dropzone = document.getElementById('dropzone');
+      document.getElementById('Download').addEventListener('click', zipFiles);
+      const dropzoneContainer = document.getElementById('dropzone-container');
+      const fileInput = document.getElementById('file-input');
+      const uploadedFilesContainer = document.getElementById('uploaded-files');
+      const uploadMoreBtn = document.getElementById('upload-more');
+      const clearAllBtn = document.getElementById('clear-all');
+      const startProcessBtn = document.getElementById('start-process');
+      const processingSection = document.getElementById('processing-section');
+      const progressContainer = document.getElementById('progress-container');
+      const progressText = document.querySelector('.progress-text');
+      let scaleLevel = 2;
+      let files = [];
+      let processedImages = [];
+      let progressCircle = document.querySelector('.progress-ring-circle');
+      let radius = progressCircle.r.baseVal.value;
+      let circumference = 2 * Math.PI * radius;
+      progressCircle.style.strokeDasharray = `${circumference} ${circumference}`;
+      progressCircle.style.strokeDashoffset = circumference;
 
-    // State
-    let files = [];
-    let progressCircle = document.querySelector('.progress-ring-circle');
-    let radius = progressCircle.r.baseVal.value;
-    let circumference = 2 * Math.PI * radius;
-    progressCircle.style.strokeDasharray = `${circumference} ${circumference}`;
-    progressCircle.style.strokeDashoffset = circumference;
-
-    // Initialize event listeners
     initEventListeners();
 
+    window.electronAPI.onProcessingDone((files) => {
+        processedImages = resultFiles;
+        console.log('Готовые файлы получены:', resultFiles);
+
+        const originalFile = files[0];
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+            const originalBase64 = e.target.result.split(',')[1];
+
+            const resultFile = resultFiles.find(f =>
+                f.name.includes(originalFile.name.replace(/\.[^/.]+$/, ''))
+            );
+
+            if (resultFile) {
+                updateComparison(originalBase64, resultFile.data);
+            } else {
+                console.warn('Не найден обработанный файл для сравнения.');
+            }
+        };
+
+        reader.readAsDataURL(originalFile);
+
+    });
     function initEventListeners() {
-        // Drag and drop events
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropzone.addEventListener(eventName, preventDefaults, false);
         });
@@ -120,7 +144,24 @@ document.addEventListener('DOMContentLoaded', () => {
             reader.readAsDataURL(file);
         });
     }
+    function zipFiles() {
+        if (processedImages.length === 0) {
+            alert('Нет обработанных файлов');
+            return;
+        }
 
+        const zip = new JSZip();
+
+        processedImages.forEach(file => {
+            const binaryData = Uint8Array.from(atob(file.data), c => c.charCodeAt(0));
+            zip.file(file.name, binaryData);
+        });
+
+        zip.generateAsync({ type: 'blob' })
+            .then(blob => {
+                saveAs(blob, 'upscaled_images.zip');
+            });
+    }
     function clearAllFiles() {
         files = [];
         uploadedFilesContainer.innerHTML = '';
@@ -140,8 +181,26 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please upload images first');
             return;
         }
+        const fileData = await Promise.all(files.map(file => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                resolve({
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    dataUrl: reader.result
+                });
+            };
+            reader.readAsDataURL(file);
+            });
+        }));
 
-        // Show processing UI
+        window.electronAPI.startProcess({
+          files: fileData,
+          level: scaleLevel
+        });
+
         processingSection.style.display = 'flex';
         progressContainer.style.display = 'flex';
 
@@ -150,11 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
             setProgress(progress);
             progressText.textContent = `Processing... ${progress}%`;
 
-            // Simulate processing delay
             await new Promise(resolve => setTimeout(resolve, 300));
         }
 
-        // Hide progress when done
         setTimeout(() => {
             progressContainer.style.display = 'none';
             alert('Processing completed!');
@@ -188,18 +245,28 @@ document.getElementById("close-btn").onclick = () => {
   window.electronAPI.close();
 };
 document.addEventListener('DOMContentLoaded', function() {
-  const x2Toggle = document.getElementById('toggle-x2');
-  const x4Toggle = document.getElementById('toggle-x4');
+    const x2Toggle = document.getElementById('toggle-x2');
+    const x4Toggle = document.getElementById('toggle-x4');
 
-  x2Toggle.addEventListener('change', function() {
-    if(this.checked) {
-      console.log('Выбран х2');
-    }
-  });
+    x2Toggle.addEventListener('change', function() {
+      if (this.checked) {
+        scaleLevel = 2;
+        console.log('Выбран х2');
+      }
+    });
 
-  x4Toggle.addEventListener('change', function() {
-    if(this.checked) {
-      console.log('Выбран х4');
-    }
-  });
+    x4Toggle.addEventListener('change', function() {
+      if (this.checked) {
+        scaleLevel = 4;
+        console.log('Выбран х4');
+      }
+    });
 });
+
+function updateComparison(beforeBase64, afterBase64) {
+  const figure = document.getElementById('figure');
+  const divisor = document.getElementById('divisor');
+
+  figure.style.backgroundImage = `url("data:image/png;base64,${beforeBase64}")`;
+  divisor.style.backgroundImage = `url("data:image/png;base64,${afterBase64}")`;
+}
