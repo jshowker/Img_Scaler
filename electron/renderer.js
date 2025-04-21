@@ -181,35 +181,39 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please upload images first');
             return;
         }
+
         const fileData = await Promise.all(files.map(file => {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                resolve({
-                    name: file.name,
-                    type: file.type,
-                    size: file.size,
-                    dataUrl: reader.result
-                });
-            };
-            reader.readAsDataURL(file);
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    resolve({
+                        name: file.name,
+                        type: file.type,
+                        size: file.size,
+                        dataUrl: reader.result
+                    });
+                };
+                reader.readAsDataURL(file);
             });
         }));
 
-        window.electronAPI.startProcess({
-          files: fileData,
-          level: scaleLevel
-        });
-
+        processedImages = [];
         processingSection.style.display = 'flex';
         progressContainer.style.display = 'flex';
 
-        for (let i = 0; i < files.length; i++) {
-            const progress = Math.round(((i + 1) / files.length) * 100);
-            setProgress(progress);
-            progressText.textContent = `Processing... ${progress}%`;
+        for (let i = 0; i < fileData.length; i++) {
+            const base64 = await window.electronAPI.enhanceImage(file.dataUrl, scaleLevel);
 
-            await new Promise(resolve => setTimeout(resolve, 300));
+            if (base64) {
+                processedImages.push({
+                    name: file.name.replace(/\.[^/.]+$/, '') + '_enhanced.png',
+                    data: base64
+                });
+
+                const progress = Math.round(((i + 1) / fileData.length) * 100);
+                setProgress(progress);
+                progressText.textContent = `Processing... ${progress}%`;
+            }
         }
 
         setTimeout(() => {
@@ -218,23 +222,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1000);
     }
 
-    function setProgress(percent) {
-        const offset = circumference - (percent / 100) * circumference;
-        progressCircle.style.strokeDashoffset = offset;
-    }
-});
-
 var divisor = document.getElementById("divisor"),
 slider = document.getElementById("slider");
 function moveDivisor() {
 	divisor.style.width = slider.value+"%";
-}
-function updateImages(beforeUrl, afterUrl) {
-  const figure = document.getElementById("figure");
-  const divisor = document.getElementById("divisor");
-
-  figure.style.backgroundImage = `url(${beforeUrl})`;
-  divisor.style.backgroundImage = `url(${afterUrl})`;
 }
 
 document.getElementById("min-btn").onclick = () => {
